@@ -1,0 +1,384 @@
+local repo = 'https://raw.githubusercontent.com/deividcomsono/Obsidian/main/'
+local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
+local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
+local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
+local Toggles = Library.Toggles
+local Options = Library.Options
+
+local Players = game:GetService('Players')
+local RunService = game:GetService('RunService')
+local Workspace = game:GetService('Workspace')
+local SoundService = game:GetService('SoundService')
+local LocalPlayer = Players.LocalPlayer
+
+local OLD_NOTIFY = Library.Notify
+
+function Library:Notify(data)
+    if type(data) ~= 'table' then
+        data = { Description = tostring(data) }
+    end
+    data.Title = data.Title or '<b>Astra</b>'
+    data.BigIcon = data.BigIcon or 'rbxassetid://118486090436366'
+    return OLD_NOTIFY(self, data)
+end
+
+local Window = Library:CreateWindow({
+    Title = '<b>Astra</b>',
+    Icon = '118486090436366',
+    Footer = 'V 1.0',
+    DisableSearch = false,
+    EnableCompacting = true,
+    SidebarCompacted = true,
+    EnableSidebarResize = true,
+    CornerRadius = 30,
+    BackgroundImage = 'rbxassetid://',
+})
+
+task.spawn(function()
+    local letters = { 'A', 's', 't', 'r', 'a' }
+    local currentLetter = 1
+    local goingReverse = false
+
+    while task.wait(0.5) do
+        local currentStr = ''
+        for i = 1, currentLetter do currentStr = currentStr .. letters[i] end
+
+        if goingReverse then currentLetter -= 1 else currentLetter += 1 end
+
+        Window:SetFooter(currentStr .. '| V 1.0')
+
+        if currentLetter > #letters then
+            goingReverse = true
+            currentLetter = #letters
+            task.wait(2)
+        elseif currentLetter <= 0 then
+            goingReverse = false
+            currentLetter = 1
+        end
+    end
+end)
+
+local Tabs = {
+    VisualTab = Window:AddTab('Visuals', 'eye', 'Visual effects'),
+    ['UI Settings'] = Window:AddTab('Options', 'cog', 'Themes and menu settings'),
+}
+
+local Custom = Tabs.VisualTab:AddLeftGroupbox('Customs', 'galaxy')
+
+-- Cosmic Blackhole Module (EternityHole only)
+CosmicBlackhole = {
+    Enabled = false,
+    Active = {},
+    Connection = nil,
+    Selected = "EternityHole",
+    Options = {
+        ["EternityHole"] = {Id = "rbxassetid://99340233207059", Scale = 1.0, Type = "model"},
+    },
+}
+
+function WipeOriginal(bh)
+    if not bh then return end
+    for _, desc in ipairs(bh:GetDescendants()) do
+        if desc:IsA("BasePart") or desc:IsA("MeshPart") or desc:IsA("UnionOperation") then
+            desc.Transparency = 1
+            desc.CastShadow = false
+        elseif desc:IsA("ParticleEmitter") or desc:IsA("Trail") or desc:IsA("Beam") or desc:IsA("Smoke") or desc:IsA("Fire") or desc:IsA("Sparkles") then
+            desc.Enabled = false
+        elseif desc:IsA("PointLight") or desc:IsA("SpotLight") or desc:IsA("SurfaceLight") then
+            desc.Enabled = false
+        elseif desc:IsA("Decal") or desc:IsA("Texture") then
+            desc.Transparency = 1
+        elseif desc:IsA("BillboardGui") or desc:IsA("SurfaceGui") then
+            desc.Enabled = false
+        end
+    end
+    if bh:IsA("BasePart") then
+        bh.Transparency = 1
+    end
+    if bh:IsA("Model") and bh.PrimaryPart then
+        bh.PrimaryPart.Transparency = 1
+    end
+end
+
+function RestoreOriginal(bh)
+    if not bh then return end
+    for _, desc in ipairs(bh:GetDescendants()) do
+        if desc:IsA("BasePart") or desc:IsA("MeshPart") or desc:IsA("UnionOperation") then
+            desc.Transparency = 0
+        elseif desc:IsA("ParticleEmitter") or desc:IsA("Trail") or desc:IsA("Beam") or desc:IsA("Smoke") or desc:IsA("Fire") or desc:IsA("Sparkles") then
+            desc.Enabled = true
+        elseif desc:IsA("PointLight") or desc:IsA("SpotLight") or desc:IsA("SurfaceLight") then
+            desc.Enabled = true
+        elseif desc:IsA("Decal") or desc:IsA("Texture") then
+            desc.Transparency = 0
+        elseif desc:IsA("BillboardGui") or desc:IsA("SurfaceGui") then
+            desc.Enabled = true
+        end
+    end
+    if bh:IsA("BasePart") then
+        bh.Transparency = 0
+    end
+    if bh:IsA("Model") and bh.PrimaryPart then
+        bh.PrimaryPart.Transparency = 0
+    end
+end
+
+function Cleanup(bh)
+    if not bh then return end
+    data = CosmicBlackhole.Active[bh]
+    if not data then return end
+    if data.Anim then
+        pcall(function() data.Anim:Disconnect() end)
+    end
+    if data.Model then
+        pcall(function() data.Model:Destroy() end)
+    end
+    RestoreOriginal(bh)
+    CosmicBlackhole.Active[bh] = nil
+end
+
+function Build(bh)
+    if not bh or not bh.Parent then return end
+    if CosmicBlackhole.Active[bh] then return end
+    hole = bh:FindFirstChild("Hole") or bh:FindFirstChildWhichIsA("BasePart")
+    if not hole then
+        return
+    end
+    WipeOriginal(bh)
+    pos = hole.Position
+    option = CosmicBlackhole.Options["EternityHole"]
+    data = {
+        Time = 0,
+        Hole = hole,
+        Anim = nil,
+        Model = nil,
+        SpinSpeed = 0,
+        TargetSpin = 0.8,
+        Scale = 0,
+        TargetScale = option.Scale,
+        StartTime = tick(),
+    }
+    assetId = option.Id
+    model = nil
+    success, result = pcall(function()
+        return game:GetObjects(assetId)[1]
+    end)
+    if success and result then
+        model = result
+    end
+    if not model then
+        cleanId = tonumber((assetId:gsub("rbxassetid://", "")))
+        success, result = pcall(function()
+            return game:GetService("InsertService"):LoadAsset(cleanId)
+        end)
+        if success and result then
+            model = result:GetChildren()[1]
+        end
+    end
+    if not model then
+        RestoreOriginal(bh)
+        return
+    end
+    model.Parent = bh
+    model.Name = "CosmicMesh"
+    for _, desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("AnimationController") or desc:IsA("Animator") or desc:IsA("Animation") then
+            desc:Destroy()
+        end
+    end
+    for _, part in ipairs(model:GetDescendants()) do
+        if part:IsA("BasePart") or part:IsA("MeshPart") then
+            part.Anchored = true
+            part.CanCollide = false
+            part.CastShadow = false
+            part.Size = part.Size * 0.01
+        end
+        if part:IsA("Smoke") or part:IsA("ParticleEmitter") then
+            if part.Name:lower():find("smog") or part.Name:lower():find("fog") or part.Name:lower():find("mist") or part.Name:lower():find("haze") or part.Name:lower():find("cloud") then
+                part:Destroy()
+            end
+        end
+    end
+    if model.PrimaryPart then
+        offset = pos - model.PrimaryPart.Position
+        model:SetPrimaryPartCFrame(model.PrimaryPart.CFrame + offset)
+    else
+        firstPart = nil
+        for _, part in ipairs(model:GetDescendants()) do
+            if part:IsA("BasePart") then
+                firstPart = part
+                break
+            end
+        end
+        if firstPart then
+            offset = pos - firstPart.Position
+            for _, part in ipairs(model:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CFrame = part.CFrame + offset
+                end
+            end
+        end
+    end
+    data.Model = model
+    data.Anim = RunService.Heartbeat:Connect(function(dt)
+        if not bh or not bh.Parent then
+            Cleanup(bh)
+            return
+        end
+        currentPos = hole.Position
+        data.Time = data.Time + dt * data.SpinSpeed
+        if data.Model then
+            if data.Model:IsA("Model") then
+                if data.Model.PrimaryPart then
+                    cf = CFrame.new(currentPos) * CFrame.Angles(0, data.Time, 0)
+                    data.Model:SetPrimaryPartCFrame(cf)
+                else
+                    firstPart = nil
+                    for _, part in ipairs(data.Model:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            firstPart = part
+                            break
+                        end
+                    end
+                    if firstPart then
+                        for _, part in ipairs(data.Model:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CFrame = CFrame.new(currentPos) * CFrame.Angles(0, data.Time, 0)
+                            end
+                        end
+                    end
+                end
+                for _, part in ipairs(data.Model:GetDescendants()) do
+                    if part:IsA("BasePart") or part:IsA("MeshPart") then
+                        if not part:GetAttribute("BaseSize") then
+                            part:SetAttribute("BaseSize", part.Size / 0.01)
+                        end
+                        baseSize = part:GetAttribute("BaseSize")
+                        part.Size = baseSize * data.Scale
+                    end
+                end
+            elseif data.Model:IsA("BasePart") then
+                data.Model.CFrame = CFrame.new(currentPos) * CFrame.Angles(0, data.Time, 0)
+                if not data.Model:GetAttribute("BaseSize") then
+                    data.Model:SetAttribute("BaseSize", data.Model.Size / 0.01)
+                end
+                data.Model.Size = data.Model:GetAttribute("BaseSize") * data.Scale
+            end
+        end
+    end)
+    bh.AncestryChanged:Connect(function()
+        if not bh.Parent then
+            Cleanup(bh)
+        end
+    end)
+    CosmicBlackhole.Active[bh] = data
+end
+
+function StartSystem()
+    if CosmicBlackhole.Connection then return end
+    CosmicBlackhole.Connection = Workspace.ChildAdded:Connect(function(obj)
+        if not CosmicBlackhole.Enabled then return end
+        if obj.Name:lower():find("blackhole") then
+            task.wait(0.2)
+            Build(obj)
+        end
+    end)
+end
+
+Custom:AddCheckbox("Blackhole Model", {
+    Text = "EternityHole Blackhole",
+    Default = false,
+    Callback = function(val)
+        wasEnabled = CosmicBlackhole.Enabled
+        CosmicBlackhole.Enabled = val
+        if not val then
+            if CosmicBlackhole.Connection then
+                CosmicBlackhole.Connection:Disconnect()
+                CosmicBlackhole.Connection = nil
+            end
+            for bh, _ in pairs(CosmicBlackhole.Active) do
+                Cleanup(bh)
+            end
+            return
+        end
+        if not wasEnabled then
+            StartSystem()
+        end
+        for bh, _ in pairs(CosmicBlackhole.Active) do
+            Cleanup(bh)
+        end
+        for _, obj in ipairs(Workspace:GetChildren()) do
+            if obj.Name:lower():find("blackhole") then
+                Build(obj)
+            end
+        end
+    end,
+})
+
+-- Sound Test
+local SoundTest = Tabs.VisualTab:AddRightGroupbox('Sound Test', 'volume-2')
+
+SoundTest:AddButton({
+    Text = 'Play Sound',
+    Func = function()
+        local s = Instance.new('Sound')
+        s.SoundId = 'rbxassetid://119974879573475'
+        s.Volume = 2
+        s.Parent = SoundService
+        s:Play()
+        task.delay(5, function()
+            if s then s:Destroy() end
+        end)
+        Library:Notify({
+            Title = '<b>Astra</b>',
+            Description = 'Playing sound: 119974879573475',
+            Time = 3,
+        })
+    end,
+})
+
+SoundTest:AddButton({
+    Text = 'Stop All Sounds',
+    Func = function()
+        for _, s in ipairs(SoundService:GetChildren()) do
+            if s:IsA('Sound') then
+                pcall(function() s:Stop() s:Destroy() end)
+            end
+        end
+    end,
+})
+
+-- UI Settings
+local MenuGroup = Tabs['UI Settings']:AddLeftGroupbox('Interface', 'monitor')
+local AppearanceGroup = Tabs['UI Settings']:AddLeftGroupbox('Appearance', 'palette')
+
+MenuGroup:AddLabel('Menu Keybind'):AddKeyPicker('MenuKeybind', { Default = 'RightShift', NoUI = true })
+Library.ToggleKeybind = Options.MenuKeybind
+
+MenuGroup:AddCheckbox('ShowCursor', { Text = 'Custom Cursor', Default = false, Callback = function(v) Library.ShowCustomCursor = v end })
+
+AppearanceGroup:AddSlider('CornerRadius', {
+    Text = 'Corner Radius',
+    Default = Library.CornerRadius,
+    Min = 0,
+    Max = 20,
+    Callback = function(v) Window:SetCornerRadius(v) end
+})
+
+AppearanceGroup:AddDropdown('DPIScale', {
+    Text = 'DPI Scale',
+    Values = { '50%', '75%', '100%', '125%', '150%', '175%', '200%' },
+    Default = '100%',
+    Callback = function(v) Library:SetDPIScale(tonumber(v:gsub('%%', ''))) end
+})
+
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({ 'MenuKeybind' })
+ThemeManager:SetFolder('AstraHub')
+SaveManager:SetFolder('AstraHub')
+SaveManager:SetSubFolder('blackhole-module')
+SaveManager:BuildConfigSection(Tabs['UI Settings'])
+ThemeManager:ApplyToTab(Tabs['UI Settings'])
+SaveManager:LoadAutoloadConfig()
